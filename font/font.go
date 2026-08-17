@@ -9,7 +9,6 @@ import (
 
 	"github.com/nomad-software/meme/cli"
 	"github.com/nomad-software/meme/data"
-	"github.com/nomad-software/meme/output"
 )
 
 var (
@@ -17,16 +16,18 @@ var (
 	Path string
 )
 
-// Override the font path at runtime.
-func SetPath(opt cli.Options) {
+// SetPath overrides the font path at runtime, based on opt.Font. It returns
+// an error if opt.Font is set but does not resolve to a usable font, since
+// that's user input and shouldn't take the process down.
+func SetPath(opt cli.Options) error {
 	if opt.Font == "" {
-		return
+		return nil
 	}
 
 	// direct file
 	if _, err := os.Stat(opt.Font); err == nil {
 		Path = opt.Font
-		return
+		return nil
 	}
 
 	// try fc-match (Linux/macOS with fontconfig)
@@ -37,16 +38,18 @@ func SetPath(opt cli.Options) {
 			if f != "" {
 				if _, err := os.Stat(f); err == nil {
 					Path = f
-					return
+					return nil
 				}
 			}
 		}
 	}
 
-	output.Error(fmt.Sprintf("Invalid font: %s", opt.Font))
+	return fmt.Errorf("invalid font: %s", opt.Font)
 }
 
-// Write the embedded font to the temporary directory.
+// Write the embedded font to the temporary directory. The embedded font is
+// baked into the binary at build time, so a failure here indicates a broken
+// build/environment rather than something a caller can recover from.
 func init() {
 	if Path != "" {
 		return
@@ -56,13 +59,18 @@ func init() {
 
 	if _, err := os.Stat(Path); os.IsNotExist(err) {
 		file, err := os.Create(Path)
-		output.OnError(err, "Could not create font file")
+		if err != nil {
+			panic(fmt.Errorf("could not create font file: %w", err))
+		}
 		defer file.Close()
 
 		stream, err := data.Files.ReadFile(data.Font)
-		output.OnError(err, "Could not read embedded font")
+		if err != nil {
+			panic(fmt.Errorf("could not read embedded font: %w", err))
+		}
 
-		_, err = file.Write(stream)
-		output.OnError(err, "Could not write font file")
+		if _, err := file.Write(stream); err != nil {
+			panic(fmt.Errorf("could not write font file: %w", err))
+		}
 	}
 }

@@ -24,29 +24,48 @@ const (
 )
 
 // RenderImage performs the graphical manipulation of the image.
-func RenderImage(opt cli.Options, st stream.Stream) stream.Stream {
+func RenderImage(opt cli.Options, st stream.Stream) (stream.Stream, error) {
+	var err error
+
 	if opt.Trigger {
-		st = shake(st)
-		st = trigger(st)
+		st, err = shake(st)
+		if err != nil {
+			return stream.Stream{}, err
+		}
+		st, err = trigger(st)
+		if err != nil {
+			return stream.Stream{}, err
+		}
 	} else if opt.Shake {
-		st = shake(st)
+		st, err = shake(st)
+		if err != nil {
+			return stream.Stream{}, err
+		}
 	}
 
 	if opt.Trigger || opt.Shake || (opt.Gif && st.IsGif()) {
-		st = renderGif(opt, st)
-	} else {
-		st = renderImage(opt, st)
+		return renderGif(opt, st)
 	}
-
-	return st
+	return renderImage(opt, st)
 }
 
 // Trigger adds the triggered banner.
-func trigger(st stream.Stream) stream.Stream {
-	src := st.DecodeGif()
+func trigger(st stream.Stream) (stream.Stream, error) {
+	src, err := st.DecodeGif()
+	if err != nil {
+		return stream.Stream{}, err
+	}
+
 	width := uint(src.Config.Width + (shakeIntensity * 2))
-	ds := Decal(data.TriggeredDecal)
-	decal := resize.Resize(width, 0, ds.DecodeImage(), resize.NearestNeighbor)
+	ds, err := Decal(data.TriggeredDecal)
+	if err != nil {
+		return stream.Stream{}, err
+	}
+	decalImg, err := ds.DecodeImage()
+	if err != nil {
+		return stream.Stream{}, err
+	}
+	decal := resize.Resize(width, 0, decalImg, resize.NearestNeighbor)
 	queue := make(chan triggerInfo)
 
 	for x, frame := range src.Image {
@@ -93,7 +112,7 @@ func processTrigger(ti triggerInfo, output chan triggerInfo) {
 }
 
 // Shake randomly shakes an image.
-func shake(st stream.Stream) stream.Stream {
+func shake(st stream.Stream) (stream.Stream, error) {
 	if st.IsGif() {
 		return shakeGif(st)
 	}
@@ -120,8 +139,12 @@ func shakeBounds(b image.Rectangle) image.Rectangle {
 // shakeGif randomly shakes a gif.
 // This function can't use concurrency because normalising the gif needs a
 // shared base image for all frames.
-func shakeGif(st stream.Stream) stream.Stream {
-	src := st.DecodeGif()
+func shakeGif(st stream.Stream) (stream.Stream, error) {
+	src, err := st.DecodeGif()
+	if err != nil {
+		return stream.Stream{}, err
+	}
+
 	base := src.Image[0]
 	images := make([]*image.Paletted, len(src.Image))
 	delays := make([]int, len(src.Image))
@@ -159,8 +182,12 @@ type shakeImgInfo struct {
 
 // shakeImage randomly shakes an image creating a gif animation.
 // This function can use concurrency because nothing is shared between frames.
-func shakeImage(st stream.Stream) stream.Stream {
-	src := st.DecodeImage()
+func shakeImage(st stream.Stream) (stream.Stream, error) {
+	src, err := st.DecodeImage()
+	if err != nil {
+		return stream.Stream{}, err
+	}
+
 	images := make([]*image.Paletted, shakeFrames)
 	delays := make([]int, shakeFrames)
 	crop := shakeBounds(src.Bounds())
@@ -203,8 +230,11 @@ func processImageShake(si shakeImgInfo, output chan shakeImgInfo) {
 }
 
 // RenderImage performs the graphical manipulation of the image.
-func renderImage(opt cli.Options, st stream.Stream) stream.Stream {
-	img := st.DecodeImage()
+func renderImage(opt cli.Options, st stream.Stream) (stream.Stream, error) {
+	img, err := st.DecodeImage()
+	if err != nil {
+		return stream.Stream{}, err
+	}
 	img = reduceImage(img, maxImageSize)
 
 	// Draw on the text.
@@ -244,8 +274,12 @@ type drawInfo struct {
 }
 
 // RenderGif performs the graphical manipulation of the gif.
-func renderGif(opt cli.Options, st stream.Stream) stream.Stream {
-	src := st.DecodeGif()
+func renderGif(opt cli.Options, st stream.Stream) (stream.Stream, error) {
+	src, err := st.DecodeGif()
+	if err != nil {
+		return stream.Stream{}, err
+	}
+
 	src = reduceGif(opt, src, maxImageSize)
 	queue := make(chan drawInfo)
 

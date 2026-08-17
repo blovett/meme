@@ -12,7 +12,7 @@ import (
 )
 
 // Save the passed image to disk.
-func Save(opt cli.Options, st stream.Stream) string {
+func Save(opt cli.Options, st stream.Stream) (string, error) {
 	var name string
 
 	if opt.OutName != "" {
@@ -22,13 +22,16 @@ func Save(opt cli.Options, st stream.Stream) string {
 	}
 
 	file, err := os.Create(name)
-	output.OnError(err, "Could not create image file")
+	if err != nil {
+		return "", output.WrapError(err, "could not create image file")
+	}
 	defer file.Close()
 
-	_, err = io.Copy(file, &st)
-	output.OnError(err, "Could not save image stream to file")
+	if _, err := io.Copy(file, &st); err != nil {
+		return "", output.WrapError(err, "could not save image stream to file")
+	}
 
-	return name
+	return name, nil
 }
 
 // Generate a temporary file name.

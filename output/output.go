@@ -2,7 +2,6 @@ package output
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/fatih/color"
 	"github.com/mattn/go-colorable"
@@ -16,18 +15,19 @@ var (
 	Stderr = colorable.NewColorableStderr()
 )
 
-// OnError prints an error if err is not nil and exits the program.
-func OnError(err error, text string) {
+// WrapError wraps err with additional context text, returning nil if err is
+// nil. Use it to annotate an error returned from a lower-level call before
+// passing it back up the call stack.
+func WrapError(err error, text string) error {
 	if err != nil {
-		fmt.Fprintln(Stderr, color.RedString(text+": %s", err.Error()))
-		os.Exit(1)
+		return fmt.Errorf("%s: %w", text, err)
 	}
+	return nil
 }
 
-// Error prints an error and exits the program.
-func Error(text string) {
-	fmt.Fprintln(Stderr, color.RedString(text))
-	os.Exit(1)
+// Errorf returns a new error built from the given message.
+func Errorf(format string, args ...interface{}) error {
+	return fmt.Errorf(format, args...)
 }
 
 // Info prints information.

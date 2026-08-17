@@ -16,10 +16,14 @@ var (
 	ImageIds []string
 )
 
-// Initialise the package.
+// Initialise the package. The embedded image assets are baked into the
+// binary at build time, so a failure to read them here indicates a broken
+// build rather than something a caller can recover from at runtime.
 func init() {
 	images, err := data.Files.ReadDir(data.ImagePath)
-	output.OnError(err, "Could not read embedded images")
+	if err != nil {
+		panic(fmt.Errorf("could not read embedded images: %w", err))
+	}
 
 	for _, image := range images {
 		id := strings.TrimSuffix(filepath.Base(image.Name()), data.ImageExtension)
@@ -74,27 +78,27 @@ func ParseOptions() Options {
 	return opt
 }
 
-// Valid validates the command line options and returns true if they are valid,
-// false if not.
-func (opt *Options) Valid() bool {
+// Valid validates the command line options, returning an error describing
+// the first problem found, or nil if they are valid.
+func (opt *Options) Valid() error {
 
 	if opt.Image == "" {
-		output.Error("An image is required")
+		return output.Errorf("an image is required")
 	}
 
 	if !(opt.Gif || opt.Trigger || opt.Shake) && opt.OutName != "" {
 		if !strings.HasSuffix(strings.ToLower(opt.OutName), ".png") {
-			output.Error("The output file name must have the suffix of .png")
+			return output.Errorf("the output file name must have the suffix of .png")
 		}
 	}
 
 	if (opt.Gif || opt.Trigger || opt.Shake) && opt.OutName != "" {
 		if !strings.HasSuffix(strings.ToLower(opt.OutName), ".gif") {
-			output.Error("The output file name must have the suffix of .gif")
+			return output.Errorf("the output file name must have the suffix of .gif")
 		}
 	}
 
-	return true
+	return nil
 }
 
 // PrintUsage prints who to use this command.

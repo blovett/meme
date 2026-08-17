@@ -1,13 +1,13 @@
 package draw
 
 import (
+	"fmt"
 	"image"
 	"math"
 	"strings"
 
 	"github.com/fogleman/gg"
 	"github.com/nomad-software/meme/font"
-	"github.com/nomad-software/meme/output"
 )
 
 const (
@@ -64,8 +64,17 @@ func calculateFontSize(ctx *gg.Context, text string, width float64, height float
 		var rWidth, rHeight float64
 		var lWidth, lHeight float64
 
-		err := ctx.LoadFontFace(font.Path, size)
-		output.OnError(err, "Could not load font file")
+		// font.Path is validated once, either by font's init() (the
+		// embedded font written to a temp file) or by font.SetPath (a
+		// user-supplied path/fontconfig match, checked with os.Stat before
+		// being assigned). A failure here means that file has become
+		// unreadable after that check, which is an environment fault, not
+		// something caused by the meme's text or image content — so it's
+		// not worth threading an error return through every text-drawing
+		// call for.
+		if err := ctx.LoadFontFace(font.Path, size); err != nil {
+			panic(fmt.Errorf("could not load font file %q: %w", font.Path, err))
+		}
 		lines := ctx.WordWrap(text, width)
 
 		for _, line := range lines {

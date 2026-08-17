@@ -63,50 +63,65 @@ func (st *Stream) FileExt() string {
 	panic("File extension not recognised")
 }
 
-// NewStream creates a new stream.
-func NewStream(stream io.Reader) Stream {
+// NewStream creates a new stream. It returns an error if stream is not
+// readable or does not contain a recognisable image, which can legitimately
+// happen for untrusted input (a corrupt upload, a URL that doesn't point at
+// an image, etc), so callers must handle it rather than the process exiting.
+func NewStream(stream io.Reader) (Stream, error) {
 	a, err := ioutil.ReadAll(stream)
-	output.OnError(err, "Could not read image bytes")
+	if err != nil {
+		return Stream{}, output.WrapError(err, "could not read image bytes")
+	}
 
 	b := make([]byte, len(a))
 	copy(b, a)
 
 	_, typ, err := image.DecodeConfig(bytes.NewReader(a))
-	output.OnError(err, "Could not decode image config")
+	if err != nil {
+		return Stream{}, output.WrapError(err, "could not decode image config")
+	}
 
 	return Stream{
 		bytes: b,
 		typ:   typ,
-	}
+	}, nil
 }
 
 // EncodeImage encodes an image into a stream.
-func EncodeImage(img image.Image) Stream {
+func EncodeImage(img image.Image) (Stream, error) {
 	var buffer bytes.Buffer
-	png.Encode(&buffer, img)
+	if err := png.Encode(&buffer, img); err != nil {
+		return Stream{}, output.WrapError(err, "could not encode image")
+	}
 	return NewStream(&buffer)
 }
 
 // DecodeImage decodes the byte stream and returns an image.
-func (st *Stream) DecodeImage() image.Image {
+func (st *Stream) DecodeImage() (image.Image, error) {
 	img, _, err := image.Decode(st)
-	output.OnError(err, "Could not decode image")
-	return img
+	if err != nil {
+		return nil, output.WrapError(err, "could not decode image")
+	}
+	return img, nil
 }
 
 // EncodeGif encodes a gif into a stream.
-func EncodeGif(img *gif.GIF) Stream {
+func EncodeGif(img *gif.GIF) (Stream, error) {
 	var buffer bytes.Buffer
-	gif.EncodeAll(&buffer, img)
+	if err := gif.EncodeAll(&buffer, img); err != nil {
+		return Stream{}, output.WrapError(err, "could not encode gif")
+	}
 	return NewStream(&buffer)
 }
 
 // DecodeGif decodes the byte stream and returns a gif.
-func (st *Stream) DecodeGif() *gif.GIF {
+func (st *Stream) DecodeGif() (*gif.GIF, error) {
 	if !st.IsGif() {
-		output.Error("Can't decode stream to gif")
+		return nil, output.Errorf("can't decode stream to gif")
 	}
-	gif, err := gif.DecodeAll(st)
-	output.OnError(err, "Could not decode gif")
-	return gif
+	g, err := gif.DecodeAll(st)
+	if err != nil {
+		return nil, output.WrapError(err, "could not decode gif")
+	}
+	return g, nil
 }
